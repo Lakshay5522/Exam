@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FormFill</title>
+<style>
+  :root { --bg:#0f1420; --card:#171f31; --line:#2a3651; --txt:#e8edf7; --dim:#8b98b3; --acc:#5b8cff; --ok:#39c98e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:760px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  p.sub { color:var(--dim); margin:0 0 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:18px; }
+  label { display:block; font-size:13px; color:var(--dim); margin:14px 0 6px; }
+  input[type=text], input[type=password], textarea, select {
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+    background:#0d1220; color:var(--txt); font-size:14px; font-family:inherit;
+  }
+  textarea { min-height:120px; resize:vertical; }
+  button { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); }
+  .row { display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
+  .msg { font-size:13px; margin-top:8px; }
+  .msg.ok { color:var(--ok); } .msg.err { color:#ff7a7a; }
+  .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--dim); border-top-color:var(--acc); border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  ul.qlist { list-style:none; padding:0; margin:8px 0 0; max-height:320px; overflow-y:auto; font-size:13px; }
+  ul.qlist li { padding:6px 10px; border-left:2px solid var(--line); margin-bottom:4px; color:var(--dim); }
+  ul.qlist li b { color:var(--txt); font-weight:600; }
+  .tag { display:inline-block; background:#0d1220; border:1px solid var(--line); border-radius:4px; padding:0 6px; font-size:11px; margin-left:6px; }
+  .result-link { word-break:break-all; background:#0d1220; border:1px solid var(--line); border-radius:8px; padding:12px; font-size:13px; color:var(--acc); text-decoration:none; display:block; }
+  table.answers { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+  table.answers td { padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.answers td:first-child { color:var(--dim); width:36%; }
+  .warn { border-color:#8a6d2f; }
+  .hint { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.5; }
+  .chk { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FormFill</h1>
+  <p class="sub">Turn any Google Form link into an auto-filled link on this server.</p>
+
+  <div class="card">
+    <label for="magicUrl">Google Form URL</label>
+    <input type="text" id="magicUrl" placeholder="https://docs.google.com/forms/d/e/.../viewform" />
+    <label for="magicProfile">Fill using profile</label>
+    <select id="magicProfile"></select>
+    <div class="row">
+      <button id="makeMagic">Create auto-fill link</button>
+      <span class="chk"><input type="checkbox" id="magicPreview" /> preview answers before opening</span>
+      <span id="magicStatus" class="msg"></span>
+    </div>
+    <div id="magicResult" style="display:none; margin-top:14px;">
+      <a id="magicLink" class="result-link" target="_blank" rel="noopener"></a>
+      <div class="row"><button id="magicCopy" class="ghost">Copy link</button></div>
+    </div>
+    <div class="hint">
+      Easiest way: paste the whole Google Form URL right after the server address —<br>
+      <b>http://<span id="hostExample"></span>/https://docs.google.com/forms/d/e/.../viewform</b><br>
+      The server fills it in the background and redirects straight to the filled form —
+      no loading page. Add a keyword to fill as a specific person from profiles.json:
+      <b>http://server/docs.lakshay.google.com/forms/...</b> or <b>/lakshay/https://docs...</b>.<br>
+      Also available: <b>/f/<form-id></b>, <b>?preview=1</b> (review answers first), <b>?p=name</b>.
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="access">Access code (if the server uses one)</label>
+    <input type="password" id="access" placeholder="leave empty if none" />
+  </div>
+
+  <div class="card">
+    <label>Manual mode (optional)</label>
+    <label for="url">Google Form URL</label>
+    <input type="text" id="url" placeholder="https://docs.google.com/forms/d/e/.../viewform" />
+    <div class="row">
+      <button id="detect">Detect questions</button>
+      <span id="detectStatus" class="msg"></span>
+    </div>
+    <div id="qlistCard" class="card" style="display:none; background:#0d1220;">
+      <b id="formTitle"></b>
+      <ul class="qlist" id="qlist"></ul>
+    </div>
+    <label for="profile">Your profile (saved in this browser only)</label>
+    <textarea id="profile" placeholder="Name: ...
+Email: ...
+City: ...
+Interests: ..."></textarea>
+    <div class="row">
+      <button id="saveProfile" class="ghost">Save profile</button>
+      <button id="generate" disabled>Generate pre-filled link</button>
+      <span id="genStatus" class="msg"></span>
+    </div>
+  </div>
+
+  <div id="resultCard" class="card" style="display:none;">
+    <b>Pre-filled link</b> — <span id="appliedCount"></span>
+    <div class="row" style="margin-top:10px;">
+      <a id="fillLink" class="result-link" target="_blank" rel="noopener"></a>
+    </div>
+    <div class="row"><button id="copyBtn" class="ghost">Copy link</button></div>
+    <div id="skippedWarn"></div>
+    <table class="answers" id="answersTable"></table>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const LS_PROFILE = "formfill.profile", LS_ACCESS = "formfill.access";
+$("profile").value = localStorage.getItem(LS_PROFILE) || "";
+$("access").value = localStorage.getItem(LS_ACCESS) || "";
+
+function esc(s) {
+  // numeric entities only -> no literal '&' sequences to worry about
+  return String(s ?? "").replace(/[&<>"']/g, c => "&#" + c.codePointAt(0) + ";");
+}
+
+async function api(path, body, extraHeaders) {
+  const r = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: Object.assign({ "Content-Type": "application/json" }, extraHeaders || {}),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+const accessHeaders = () => ({ "X-Access-Code": $("access").value });
+
+// show this server's host in the usage hint
+$("hostExample").textContent = location.host;
+
+// ---- magic link ----
+fetch("/api/profiles", { headers: accessHeaders() })
+  .then(r => r.json())
+  .then(d => { d.names.forEach(n => $("magicProfile").add(new Option(n, n))); })
+  .catch(() => {});
+
+function formIdFrom(url) {
+  const s = (url || "").trim();
+  if (/^1FAIpQLS[\w-]+$/.test(s)) return s;
+  const m = s.match(/\/forms\/(?:u\/\d+\/)?d\/(?:e\/)?([\w-]+)/);
+  return m ? m[1] : null;
+}
+
+$("makeMagic").onclick = async () => {
+  const st = $("magicStatus");
+  st.className = "msg"; st.textContent = "";
+  $("magicResult").style.display = "none";
+  let id = formIdFrom($("magicUrl").value);
+  try {
+    if (!id) {
+      st.innerHTML = '<span class="spinner"></span>Resolving link…';
+      const d = await api("/api/magiclink", { url: $("magicUrl").value }, accessHeaders());
+      id = d.form_id;
+    }
+    const p = $("magicProfile").value || "default";
+    const base = location.origin + "/f/" + id + "?p=" + encodeURIComponent(p);
+    const link = $("magicPreview").checked ? base + "&preview=1" : base;
+    $("magicLink").href = link; $("magicLink").textContent = link;
+    $("magicResult").style.display = "block";
+    st.className = "msg ok"; st.textContent = "Link ready — open it or copy it.";
+  } catch (e) {
+    st.className = "msg err"; st.textContent = e.message;
+  }
+};
+
+$("magicCopy").onclick = () => {
+  navigator.clipboard.writeText($("magicLink").href)
+    .then(() => { $("magicCopy").textContent = "Copied ✓"; setTimeout(() => $("magicCopy").textContent = "Copy link", 1500); });
+};
+
+// ---- manual mode ----
+$("saveProfile").onclick = () => {
+  localStorage.setItem(LS_PROFILE, $("profile").value);
+  localStorage.setItem(LS_ACCESS, $("access").value);
+  $("saveProfile").textContent = "Saved ✓";
+  setTimeout(() => $("saveProfile").textContent = "Save profile", 1500);
+};
+
+$("detect").onclick = async () => {
+  const st = $("detectStatus");
+  st.className = "msg"; st.innerHTML = '<span class="spinner"></span>Detecting…';
+  try {
+    const d = await api("/api/parse", { url: $("url").value }, accessHeaders());
+    st.className = "msg ok"; st.textContent = `${d.question_count} questions found`;
+    $("formTitle").textContent = d.title || "(untitled)";
+    $("qlist").innerHTML = d.questions.map(q =>
+      `<li><b>[${q.index}]</b> ${esc(q.label)}<span class="tag">${q.type}${q.required ? " • required" : ""}</span></li>`
+    ).join("");
+    $("qlistCard").style.display = "block";
+    $("generate").disabled = false;
+  } catch (e) {
+    st.className = "msg err"; st.textContent = e.message;
+    $("generate").disabled = true;
+  }
+};
+
+$("generate").onclick = async () => {
+  const st = $("genStatus");
+  st.className = "msg"; st.innerHTML = '<span class="spinner"></span>Asking Gemini…';
+  $("resultCard").style.display = "none";
+  try {
+    const d = await api("/api/prefill", { url: $("url").value, profile: $("profile").value }, accessHeaders());
+    st.className = "msg ok"; st.textContent = "done";
+    $("appliedCount").textContent = `${d.applied_count} answer(s) applied`;
+    $("fillLink").href = d.fill_url; $("fillLink").textContent = d.fill_url;
+    $("answersTable").innerHTML = d.applied.map(a =>
+      `<tr><td>${esc(a.label)}</td><td>${esc(a.answer)}</td></tr>`).join("");
+    $("skippedWarn").innerHTML = d.skipped_required.length
+      ? `<div class="card warn" style="margin-top:12px;">Required but unanswered: ${d.skipped_required.map(q => esc(q.label)).join(", ")}</div>`
+      : "";
+    $("resultCard").style.display = "block";
+  } catch (e) {
+    st.className = "msg err"; st.textContent = e.message;
+  }
+};
+
+$("copyBtn").onclick = () => {
+  navigator.clipboard.writeText($("fillLink").href)
+    .then(() => { $("copyBtn").textContent = "Copied ✓"; setTimeout(() => $("copyBtn").textContent = "Copy link", 1500); });
+};
+</script>
+</body>
+</html>
